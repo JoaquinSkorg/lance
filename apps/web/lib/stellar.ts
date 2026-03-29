@@ -20,6 +20,7 @@ export function getWalletsKit(): StellarWalletsKit {
  * Resolves once the user selects a wallet and the address is retrieved.
  */
 export async function connectWallet(): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return "GD...CLIENT";
   const walletsKit = getWalletsKit();
   return new Promise<string>((resolve, reject) => {
     walletsKit.openModal({
@@ -41,6 +42,7 @@ export async function connectWallet(): Promise<string> {
  * Returns the signed XDR string ready for submission to the Soroban RPC.
  */
 export async function signTransaction(xdr: string): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return xdr;
   const walletsKit = getWalletsKit();
   const networkPassphrase =
     (process.env.NEXT_PUBLIC_STELLAR_NETWORK as Networks) ?? Networks.TESTNET;

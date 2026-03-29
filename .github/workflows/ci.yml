@@ -113,6 +113,8 @@ jobs:
     name: Frontend — E2E (Playwright)
     runs-on: ubuntu-latest
     needs: frontend-build
+    env:
+      NEXT_PUBLIC_E2E: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

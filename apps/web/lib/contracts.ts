@@ -45,6 +45,7 @@ async function invokeEscrow(
   method: string,
   args: xdr.ScVal[],
 ): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return "FAKE_TX_HASH";
   if (!ESCROW_CONTRACT_ID) {
     throw new Error("NEXT_PUBLIC_ESCROW_CONTRACT_ID is not configured.");
   }
@@ -113,6 +114,7 @@ export async function depositEscrow(params: {
   amountUsdc: bigint;
   milestones: number;
 }): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return "FAKE_TX_HASH";
   const { jobId, clientAddress, freelancerAddress, amountUsdc, milestones } = params;
 
   // ── Parameter validation (throws before any network call) ─────────────────
@@ -151,6 +153,7 @@ export async function depositEscrow(params: {
  * @returns Confirmed transaction hash.
  */
 export async function releaseMilestone(jobId: bigint): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return "FAKE_TX_HASH";
   if (jobId < 0n) {
     throw new Error("Invalid jobId: must be a non-negative integer.");
   }
@@ -170,6 +173,7 @@ export async function releaseMilestone(jobId: bigint): Promise<string> {
  * @returns Confirmed transaction hash.
  */
 export async function openDispute(jobId: bigint): Promise<string> {
+  if (process.env.NEXT_PUBLIC_E2E === "true") return "FAKE_TX_HASH";
   if (jobId < 0n) {
     throw new Error("Invalid jobId: must be a non-negative integer.");
   }
