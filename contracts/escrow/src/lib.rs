@@ -32,6 +32,7 @@ pub struct EscrowJob {
 pub enum DataKey {
     Job(u64),
     Admin,
+    AgentJudge,
 }
 
 #[contracttype]
@@ -49,11 +50,23 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    pub fn initialize(env: Env, admin: Address) {
+    pub fn initialize(env: Env, admin: Address, agent_judge: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::AgentJudge, &agent_judge);
+    }
+
+    /// Admin can update the Agent Judge address.
+    pub fn set_agent_judge(env: Env, new_agent_judge: Address) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("not initialized");
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::AgentJudge, &new_agent_judge);
     }
 
     /// Client deposits USDC and opens an escrow job.
@@ -271,43 +284,45 @@ impl EscrowContract {
             .publish(("escrow", "DisputeRaised"), event_data);
     }
 
-    /// Admin (AI judge authority) resolves dispute -- splits funds by BPS.
-    /// `freelancer_share_bps`: 0-10000 (100% = 10000).
-    pub fn resolve_dispute(env: Env, job_id: u64, freelancer_share_bps: u32) {
-        let admin: Address = env
+    /// Agent Judge resolves dispute -- splits funds by explicit amounts.
+    /// `payee_amount`: Amount to pay to the freelancer (payee).
+    /// `payer_amount`: Amount to return to the client (payer).
+    pub fn resolve_dispute(env: Env, job_id: u64, payee_amount: i128, payer_amount: i128) {
+        let agent_judge: Address = env
             .storage()
             .instance()
-            .get(&DataKey::Admin)
-            .expect("not initialized");
-        admin.require_auth();
+            .get(&DataKey::AgentJudge)
+            .expect("agent judge not set");
+        agent_judge.require_auth();
 
-        assert!(freelancer_share_bps <= 10_000, "bps out of range");
+        assert!(payee_amount >= 0, "payee_amount must be >= 0");
+        assert!(payer_amount >= 0, "payer_amount must be >= 0");
 
         let key = DataKey::Job(job_id);
         let mut job: EscrowJob = env.storage().persistent().get(&key).expect("job not found");
         assert!(job.status == EscrowStatus::Disputed, "job not disputed");
 
         let remaining = job.total_amount - job.released_amount;
-        let freelancer_share = (remaining * (freelancer_share_bps as i128)) / 10_000;
-        let client_share = remaining - freelancer_share;
+        let total_payout = payee_amount + payer_amount;
+        assert!(total_payout <= remaining, "payout exceeds remaining funds");
 
         let token_client = token::Client::new(&env, &job.token);
-        if freelancer_share > 0 {
+        if payee_amount > 0 {
             token_client.transfer(
                 &env.current_contract_address(),
                 &job.freelancer,
-                &freelancer_share,
+                &payee_amount,
             );
         }
-        if client_share > 0 {
+        if payer_amount > 0 {
             token_client.transfer(
                 &env.current_contract_address(),
                 &job.client,
-                &client_share,
+                &payer_amount,
             );
         }
 
-        job.released_amount = job.total_amount;
+        job.released_amount += total_payout;
         job.status = EscrowStatus::Resolved;
         env.storage().persistent().set(&key, &job);
     }
@@ -367,6 +382,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -376,7 +392,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
 
         let tc = token::Client::new(&env, &token_addr);
@@ -401,12 +417,13 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
 
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
+        cc.initialize(&admin, &agent_judge);
     }
 
     #[test]
@@ -416,6 +433,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
         let rando = Address::generate(&env);
@@ -426,7 +444,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.release_milestone(&1u64, &rando);
     }
@@ -437,6 +455,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -446,7 +465,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &10_000i128, &4u32);
 
         cc.release_milestone(&1u64, &client);
@@ -457,7 +476,8 @@ mod test {
         let job = cc.get_job(&1u64);
         assert_eq!(job.status, EscrowStatus::Disputed);
 
-        cc.resolve_dispute(&1u64, &5000u32);
+        // 50/50 split: 3750 to freelancer, 3750 to client
+        cc.resolve_dispute(&1u64, &3750i128, &3750i128);
         let job = cc.get_job(&1u64);
         assert_eq!(job.status, EscrowStatus::Resolved);
         assert_eq!(tc.balance(&freelancer), 6250);
@@ -470,6 +490,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -479,7 +500,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &5000i128, &2u32);
         assert_eq!(
             token::Client::new(&env, &token_addr).balance(&client),
@@ -504,6 +525,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -513,7 +535,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &0i128, &1u32);
     }
 
@@ -524,6 +546,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -533,7 +556,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &-100i128, &1u32);
     }
 
@@ -544,6 +567,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -553,7 +577,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
     }
@@ -565,6 +589,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -574,7 +599,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.release_funds(&1u64, &freelancer, &0u32);
     }
@@ -586,6 +611,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -595,7 +621,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.release_funds(&1u64, &client, &5u32);
     }
@@ -607,6 +633,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -616,7 +643,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.release_funds(&1u64, &client, &0u32);
         cc.release_funds(&1u64, &client, &0u32);
@@ -629,6 +656,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -638,7 +666,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &900i128, &3u32);
 
         cc.release_milestone(&1u64, &client);
@@ -654,6 +682,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
         let rando = Address::generate(&env);
@@ -664,7 +693,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.open_dispute(&1u64, &rando);
     }
@@ -676,6 +705,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -685,9 +715,9 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
-        cc.resolve_dispute(&1u64, &5000u32);
+        cc.resolve_dispute(&1u64, &500i128, &500i128);
     }
 
     #[test]
@@ -697,6 +727,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -706,7 +737,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.refund(&1u64, &freelancer);
     }
@@ -718,6 +749,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -727,7 +759,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
 
         cc.release_milestone(&1u64, &client);
@@ -738,11 +770,12 @@ mod test {
 
     #[test]
     #[should_panic]
-    fn test_resolve_dispute_non_admin_panics() {
+    fn test_resolve_dispute_non_agent_judge_panics() {
         let env = Env::default();
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
         let rando = Address::generate(&env);
@@ -753,9 +786,9 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
-        cc.resolve_dispute(&1u64, &5000u32);
+        cc.resolve_dispute(&1u64, &5000i128, &4000i128);
     }
 
     #[test]
@@ -778,6 +811,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -787,7 +821,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         
         let total_amount = 10_000i128;
         let num_milestones = 4u32;
@@ -824,6 +858,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -833,7 +868,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
 
         cc.raise_dispute(&1u64, &client);
@@ -848,6 +883,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -857,7 +893,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
 
         cc.raise_dispute(&1u64, &freelancer);
@@ -873,6 +909,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
         let rando = Address::generate(&env);
@@ -883,7 +920,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
         cc.raise_dispute(&1u64, &rando);
     }
@@ -895,6 +932,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -904,7 +942,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &9000i128, &3u32);
 
         cc.release_milestone(&1u64, &client);
@@ -921,6 +959,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -930,7 +969,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &1000i128, &2u32);
 
         cc.raise_dispute(&1u64, &freelancer);
@@ -945,6 +984,7 @@ mod test {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
         let client = Address::generate(&env);
         let freelancer = Address::generate(&env);
 
@@ -954,7 +994,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin);
+        cc.initialize(&admin, &agent_judge);
         cc.deposit(&1u64, &client, &freelancer, &token_addr, &10_000i128, &2u32);
 
         cc.raise_dispute(&1u64, &freelancer);
@@ -962,8 +1002,8 @@ mod test {
         let job = cc.get_job(&1u64);
         assert_eq!(job.status, EscrowStatus::Disputed);
 
-        // Admin resolves 70% to freelancer
-        cc.resolve_dispute(&1u64, &7000u32);
+        // Agent Judge resolves 70% to freelancer (7000), 30% to client (3000)
+        cc.resolve_dispute(&1u64, &7000i128, &3000i128);
 
         let job = cc.get_job(&1u64);
         assert_eq!(job.status, EscrowStatus::Resolved);
@@ -971,5 +1011,67 @@ mod test {
         let tc = token::Client::new(&env, &token_addr);
         assert_eq!(tc.balance(&freelancer), 7000);
         assert_eq!(tc.balance(&client), 93000);
+    }
+
+    #[test]
+    fn test_set_agent_judge() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
+        let new_agent_judge = Address::generate(&env);
+        let client = Address::generate(&env);
+        let freelancer = Address::generate(&env);
+
+        let token_addr = setup_token(&env, &admin);
+        mint(&env, &token_addr, &client);
+
+        let contract_id = env.register_contract(None, EscrowContract);
+        let cc = EscrowContractClient::new(&env, &contract_id);
+
+        cc.initialize(&admin, &agent_judge);
+        cc.deposit(&1u64, &client, &freelancer, &token_addr, &10_000i128, &2u32);
+
+        cc.raise_dispute(&1u64, &freelancer);
+
+        // Admin can update agent judge
+        cc.set_agent_judge(&new_agent_judge);
+
+        // New agent judge can resolve dispute
+        cc.resolve_dispute(&1u64, &5000i128, &5000i128);
+
+        let job = cc.get_job(&1u64);
+        assert_eq!(job.status, EscrowStatus::Resolved);
+
+        let tc = token::Client::new(&env, &token_addr);
+        assert_eq!(tc.balance(&freelancer), 5000);
+        assert_eq!(tc.balance(&client), 95000);
+    }
+
+    #[test]
+    #[should_panic(expected = "payout exceeds remaining funds")]
+    fn test_resolve_dispute_exceeds_remaining_funds() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let agent_judge = Address::generate(&env);
+        let client = Address::generate(&env);
+        let freelancer = Address::generate(&env);
+
+        let token_addr = setup_token(&env, &admin);
+        mint(&env, &token_addr, &client);
+
+        let contract_id = env.register_contract(None, EscrowContract);
+        let cc = EscrowContractClient::new(&env, &contract_id);
+
+        cc.initialize(&admin, &agent_judge);
+        cc.deposit(&1u64, &client, &freelancer, &token_addr, &10_000i128, &2u32);
+
+        cc.raise_dispute(&1u64, &freelancer);
+
+        // Try to payout more than remaining funds (10000)
+        cc.resolve_dispute(&1u64, &6000i128, &6000i128);
     }
 }
