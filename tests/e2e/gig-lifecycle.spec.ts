@@ -180,7 +180,7 @@ test("full gig lifecycle: post, bid, accept, fund, deliver, release", async ({
   await page.click("button:has-text('Confirm & Sign')");
 
   await expect(
-    page.getByRole("heading", { name: "Escrow Funded!" }),
+    page.getByRole("heading", { name: "Escrow Funded!", level: 2 }),
   ).toBeVisible({ timeout: 10000 });
 
   // 5. Back to job details with FUNDED status
