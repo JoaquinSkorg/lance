@@ -69,6 +69,23 @@ test("full gig lifecycle: post, bid, accept, fund, deliver, release", async ({ p
     }
   });
 
+  await page.route("https://soroban-testnet.stellar.org", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          status: "SUCCESS",
+          hash: "FAKE_TX_HASH",
+          latestLedger: 1234,
+          latestLedgerCloseTime: 123456789,
+        },
+      }),
+    });
+  });
+
   // 1. Client posts a job
   await page.goto("/jobs/new");
   await page.fill("#job-title", "Build a Soroban Smart Contract");

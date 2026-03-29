@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, type Job, type Bid } from "@/lib/api";
 import { releaseMilestone } from "@/lib/contracts";
@@ -133,7 +133,7 @@ export default function JobDetailsPage() {
 
         <div className="space-y-4">
           <h2 className="text-xl font-bold">Bids ({bids.length})</h2>
-          {bids.map((bid) => (
+          {bids.map((bid: Bid) => (
             <div key={bid.id} className="p-4 border border-gray-200 rounded-xl space-y-3">
               <p className="text-xs font-mono text-gray-500 truncate">{bid.freelancer_address}</p>
               <p className="text-sm line-clamp-2">{bid.proposal}</p>
