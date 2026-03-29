@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol, Bytes, IntoVal};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Bytes, Env, IntoVal, Symbol, Vec};
 
 // Types matching Job Registry contract's public types for cross-contract decoding
 #[contracttype]
@@ -167,6 +167,24 @@ impl ReputationContract {
                 total_points: 0,
                 reviews: 0,
             })
+    }
+
+    /// Frontend-friendly aggregate metrics for public profile pages.
+    /// Returns: [score_bps, total_jobs, total_points, reviews]
+    pub fn get_public_metrics(env: Env, address: Address, role_name: Symbol) -> Vec<i128> {
+        let role = if role_name == Symbol::new(&env, "client") {
+            Role::Client
+        } else {
+            Role::Freelancer
+        };
+        let rep = Self::get_score(env.clone(), address, role);
+
+        let mut metrics = Vec::new(&env);
+        metrics.push_back(rep.score as i128);
+        metrics.push_back(rep.total_jobs as i128);
+        metrics.push_back(rep.total_points as i128);
+        metrics.push_back(rep.reviews as i128);
+        metrics
     }
 }
 

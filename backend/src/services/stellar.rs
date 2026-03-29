@@ -295,7 +295,7 @@ impl StellarService {
                 other => bail!("unexpected getTransaction status: {other}"),
             }
         }
-        bail!("transaction {hash} not confirmed after {} polls", MAX_POLL_ATTEMPTS)
+        bail!("transaction {hash} not confirmed after {MAX_POLL_ATTEMPTS} polls")
     }
 
     async fn rpc_call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
