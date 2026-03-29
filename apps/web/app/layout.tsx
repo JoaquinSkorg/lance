@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Providers } from "@/components/providers";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { ToastProvider } from "@/components/ui/toast-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lance | Advanced Soroban Intelligence Freelance Platform",
-  description: "Advanced Soroban intelligence bridging freelancers and clients for instant, secure settlements.",
+  title: "Lance - Decentralized Freelance Marketplace",
+  description: "Stellar-native freelance marketplace with AI-powered dispute resolution",
 };
 
 export default function RootLayout({
@@ -29,11 +28,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased selection:bg-primary/20 selection:text-primary`}
       >
-        <Providers>
-          <DashboardLayout>
-            {children}
-          </DashboardLayout>
-        </Providers>
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );
