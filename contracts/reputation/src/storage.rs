@@ -22,8 +22,4 @@ pub fn write_profile(env: &Env, address: &Address, profile: &Profile) {
         .set(&StorageKey::Profile(address.clone()), profile);
 }
 
-pub fn profile_exists(env: &Env, address: &Address) -> bool {
-    env.storage()
-        .persistent()
-        .has(&StorageKey::Profile(address.clone()))
-}
+

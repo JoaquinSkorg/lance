@@ -14,7 +14,7 @@ pub struct Profile {
 }
 
 impl Profile {
-    pub fn new(env: &Env, address: Address) -> Self {
+    pub fn new(_env: &Env, address: Address) -> Self {
         Self {
             address,
             client_score: 5000,
@@ -27,7 +27,7 @@ impl Profile {
         }
     }
 
-    pub fn default(env: Env) -> Self {
+    pub fn default(_env: Env) -> Self {
         // This is tricky because we need an address.
         // We'll leave it to the caller to provide an address.
         panic!("Profile needs an address; use new(env, address)")

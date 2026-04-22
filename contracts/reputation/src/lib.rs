@@ -7,8 +7,6 @@ use soroban_sdk::{
 mod profile;
 mod storage;
 
-use profile::Profile;
-
 // Types matching Job Registry contract's public types for cross-contract decoding
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
