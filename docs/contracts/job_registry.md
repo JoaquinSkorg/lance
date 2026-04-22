@@ -28,6 +28,35 @@ The `JobRegistry` contract manages job postings, bid submissions, bid acceptance
 - `Unauthorized` (3): caller is not the job's client.
 - `BidNotFound` (6): selected freelancer did not submit a bid.
 
-### Notes
-
 This implementation strengthens trustlessness by ensuring bid acceptance can only succeed for bidders who actually participated in the auction.
+
+## `get_job`
+
+### Purpose
+
+`get_job` is a view function that retrieves the full record of a specific job.
+
+### Behavior
+
+- Retrieves the `JobRecord` from persistent storage.
+- Returns the job details if it exists.
+
+### Errors
+
+- `JobNotFound` (1): The specified job ID does not exist.
+
+## `get_bids`
+
+### Purpose
+
+`get_bids` is a view function that retrieves all bids submitted for a specific job.
+
+### Behavior
+
+- Verifies the job exists.
+- Retrieves the list of `BidRecord`s associated with the job.
+- Returns an empty list if the job exists but has no bids.
+
+### Errors
+
+- `JobNotFound` (1): The specified job ID does not exist.

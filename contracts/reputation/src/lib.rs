@@ -93,7 +93,10 @@ impl ReputationContract {
         // call JobRegistry.get_job(job_id) and decode into local JobRecord
         let get_sym = Symbol::new(&env, "get_job");
         let args = soroban_sdk::vec![&env, job_id.into_val(&env)];
-        let job: JobRecord = env.invoke_contract::<JobRecord>(&registry_addr, &get_sym, args);
+        let job: JobRecord = env
+            .invoke_contract::<Result<JobRecord, u32>>(&registry_addr, &get_sym, args)
+            .unwrap()
+            .unwrap();
 
         // verify job is completed (ratings only allowed after completion)
         assert!(job.status == JobStatus::Completed, "job not completed");
