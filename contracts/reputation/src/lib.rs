@@ -154,7 +154,8 @@ impl ReputationContract {
         let mut profile = storage::read_profile_or_default(&env, &address);
         match role {
             Role::Client => {
-                profile.client_score = Self::clamp_score(profile.client_score.saturating_add(delta));
+                profile.client_score =
+                    Self::clamp_score(profile.client_score.saturating_add(delta));
                 profile.client_jobs = profile.client_jobs.saturating_add(1);
             }
             Role::Freelancer => {

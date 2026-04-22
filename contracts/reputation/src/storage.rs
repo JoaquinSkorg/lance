@@ -1,5 +1,5 @@
-use soroban_sdk::{Address, Env};
 use crate::profile::Profile;
+use soroban_sdk::{Address, Env};
 
 #[soroban_sdk::contracttype]
 pub enum StorageKey {
