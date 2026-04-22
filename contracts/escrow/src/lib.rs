@@ -72,6 +72,9 @@ pub enum EscrowError {
     NotInitialized = 2,
     Unauthorized = 3,
     InvalidInput = 4,
+    JobNotFound = 5,
+    InvalidState = 6,
+    AmountMismatch = 7,
 }
 
 #[contracttype]
@@ -82,6 +85,14 @@ pub struct DisputeRaisedEvent {
     pub milestones_released: u32,
     pub milestones_total: u32,
     pub raised_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct DepositEvent {
+    pub job_id: u64,
+    pub amount: i128,
+    pub deposited_at: u64,
 }
 
 #[contract]
@@ -192,32 +203,56 @@ impl EscrowContract {
     }
 
     /// Client deposits total amount and transitions job to Funded.
-    pub fn deposit(env: Env, job_id: u64, amount: i128) {
+    pub fn deposit(env: Env, job_id: u64, amount: i128) -> Result<(), EscrowError> {
         let key = DataKey::Job(job_id);
-        let mut job: EscrowJob = env.storage().persistent().get(&key).expect("job not found");
+        let mut job: EscrowJob = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .ok_or(EscrowError::JobNotFound)?;
+
+        // Caller must be client
         job.client.require_auth();
-        assert!(
-            job.status == EscrowStatus::Setup,
-            "already funded or invalid state"
-        );
-        assert!(amount > 0, "amount must be > 0");
-        assert!(!job.milestones.is_empty(), "no milestones defined");
+
+        // Only allow deposit in Setup state
+        if job.status != EscrowStatus::Setup {
+            return Err(EscrowError::InvalidState);
+        }
+
+        if amount <= 0 {
+            return Err(EscrowError::InvalidInput);
+        }
+
+        if job.milestones.is_empty() {
+            return Err(EscrowError::InvalidInput);
+        }
 
         let mut total_milestones_amount = 0i128;
         for m in job.milestones.iter() {
-            total_milestones_amount += m.amount;
+            total_milestones_amount = total_milestones_amount.saturating_add(m.amount);
         }
-        assert!(
-            total_milestones_amount == amount,
-            "sum of milestones must equal total amount"
-        );
 
+        if total_milestones_amount != amount {
+            return Err(EscrowError::AmountMismatch);
+        }
+
+        // Transfer tokens from client to contract
         let token_client = token::Client::new(&env, &job.token);
         token_client.transfer(&job.client, &env.current_contract_address(), &amount);
 
         job.total_amount = amount;
         job.status = EscrowStatus::Funded;
         env.storage().persistent().set(&key, &job);
+
+        // Emit deposit event for off-chain logging
+        let evt = DepositEvent {
+            job_id,
+            amount,
+            deposited_at: env.ledger().timestamp(),
+        };
+        env.events().publish(("escrow", "Deposit"), evt);
+
+        Ok(())
     }
 
     /// Client approves a milestone -- releases next pending milestone to freelancer.
@@ -510,7 +545,7 @@ mod test {
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
-        cc.deposit(&1u64, &9000i128);
+    cc.deposit(&1u64, &9000i128).unwrap();
 
         let tc = token::Client::new(&env, &token_addr);
         assert_eq!(tc.balance(&contract_id), 9000);
@@ -552,7 +587,7 @@ mod test {
         cc.add_milestone(&1u64, &3000i128); // 30%
         cc.add_milestone(&1u64, &5000i128); // 50%
 
-        cc.deposit(&1u64, &10_000i128);
+    cc.deposit(&1u64, &10_000i128).unwrap();
 
         let tc = token::Client::new(&env, &token_addr);
         assert_eq!(tc.balance(&contract_id), 10_000);
@@ -615,7 +650,7 @@ mod test {
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &500i128);
         cc.add_milestone(&1u64, &500i128);
-        cc.deposit(&1u64, &1000i128);
+    cc.deposit(&1u64, &1000i128).unwrap();
 
         cc.release_milestone(&1u64, &rando);
     }
@@ -642,7 +677,7 @@ mod test {
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
-        cc.deposit(&1u64, &10_000i128);
+    cc.deposit(&1u64, &10_000i128).unwrap();
 
         cc.release_milestone(&1u64, &client);
         let tc = token::Client::new(&env, &token_addr);
@@ -680,7 +715,7 @@ mod test {
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
-        cc.deposit(&1u64, &5000i128);
+    cc.deposit(&1u64, &5000i128).unwrap();
 
         assert_eq!(
             token::Client::new(&env, &token_addr).balance(&client),
@@ -716,7 +751,8 @@ mod test {
     cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &500i128);
-        cc.deposit(&1u64, &1000i128); // Should panic as 500 != 1000
+    let res = cc.deposit(&1u64, &1000i128); // Should Err as 500 != 1000
+    assert!(res.is_err());
     }
 
     #[test]
@@ -738,7 +774,7 @@ mod test {
 
     cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
-        cc.deposit(&1u64, &1000i128);
+    cc.deposit(&1u64, &1000i128).unwrap();
     }
 
     #[test]
@@ -782,7 +818,7 @@ mod test {
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
-        cc.deposit(&1u64, &total_amount);
+    cc.deposit(&1u64, &total_amount).unwrap();
 
         let tc = token::Client::new(&env, &token_addr);
         assert_eq!(tc.balance(&contract_id), total_amount);
@@ -826,7 +862,7 @@ mod test {
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
-        cc.deposit(&1u64, &9000i128);
+    cc.deposit(&1u64, &9000i128).unwrap();
 
         cc.raise_dispute(&1u64, &client);
 
