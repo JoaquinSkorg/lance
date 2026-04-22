@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, contracterror, token, Address, Env, Vec};
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +51,31 @@ pub enum DataKey {
 
 #[contracttype]
 #[derive(Clone)]
+pub struct EscrowInitializedEvent {
+    pub admin: Address,
+    pub agent_judge: Address,
+    pub initialized_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct AgentJudgeUpdatedEvent {
+    pub old_agent: Address,
+    pub new_agent: Address,
+    pub updated_at: u64,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum EscrowError {
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    Unauthorized = 3,
+    InvalidInput = 4,
+}
+
+#[contracttype]
+#[derive(Clone)]
 pub struct DisputeRaisedEvent {
     pub job_id: u64,
     pub initiator: Address,
@@ -64,27 +89,61 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    pub fn initialize(env: Env, admin: Address, agent_judge: Address) {
+    pub fn initialize(env: Env, admin: Address, agent_judge: Address) -> Result<(), EscrowError> {
+        // Prevent double initialization
         if env.storage().instance().has(&DataKey::Admin) {
-            panic!("already initialized");
+            return Err(EscrowError::AlreadyInitialized);
         }
+
+        // Basic validation: admin and agent_judge must be distinct
+        if admin == agent_judge {
+            return Err(EscrowError::InvalidInput);
+        }
+
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::AgentJudge, &agent_judge);
+
+        // Emit an initialization event for off-chain consumers and logging
+        let event = EscrowInitializedEvent {
+            admin: admin.clone(),
+            agent_judge: agent_judge.clone(),
+            initialized_at: env.ledger().timestamp(),
+        };
+        env.events().publish(("escrow", "Initialized"), event);
+
+        Ok(())
     }
 
     /// Admin can update the Agent Judge address.
-    pub fn set_agent_judge(env: Env, new_agent_judge: Address) {
+    /// Admin can update the Agent Judge address.
+    pub fn set_agent_judge(env: Env, new_agent_judge: Address) -> Result<(), EscrowError> {
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .expect("not initialized");
+            .ok_or(EscrowError::NotInitialized)?;
+        // This will panic with Soroban auth error if the signer isn't present; keep that behavior
         admin.require_auth();
+
+        if admin == new_agent_judge {
+            return Err(EscrowError::InvalidInput);
+        }
+
         env.storage()
             .instance()
             .set(&DataKey::AgentJudge, &new_agent_judge);
+
+        // Emit an event for off-chain logging and debugging
+        let evt = AgentJudgeUpdatedEvent {
+            old_agent: admin.clone(),
+            new_agent: new_agent_judge.clone(),
+            updated_at: env.ledger().timestamp(),
+        };
+        env.events().publish(("escrow", "AgentJudgeUpdated"), evt);
+
+        Ok(())
     }
 
     /// Client creates a job entry in Setup phase.
@@ -446,7 +505,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
@@ -485,7 +544,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
 
         // 3 distinct milestones with different amounts
@@ -530,8 +589,8 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
+    cc.initialize(&admin, &agent_judge).unwrap();
     }
 
     #[test]
@@ -552,7 +611,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &500i128);
         cc.add_milestone(&1u64, &500i128);
@@ -577,7 +636,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
@@ -617,7 +676,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &2500i128);
         cc.add_milestone(&1u64, &2500i128);
@@ -654,7 +713,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &500i128);
         cc.deposit(&1u64, &1000i128); // Should panic as 500 != 1000
@@ -677,7 +736,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.deposit(&1u64, &1000i128);
     }
@@ -715,7 +774,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
 
         let total_amount = 10_000i128;
@@ -762,7 +821,7 @@ mod test {
         let contract_id = env.register_contract(None, EscrowContract);
         let cc = EscrowContractClient::new(&env, &contract_id);
 
-        cc.initialize(&admin, &agent_judge);
+    cc.initialize(&admin, &agent_judge).unwrap();
         cc.create_job(&1u64, &client, &freelancer, &token_addr);
         cc.add_milestone(&1u64, &3000i128);
         cc.add_milestone(&1u64, &3000i128);
