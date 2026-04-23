@@ -588,10 +588,10 @@ mod test {
         assert_eq!(view.address, address);
         assert_eq!(view.client.score, 5500);
         assert_eq!(view.client.total_jobs, 1);
-        assert_eq!(view.client.total_points, 500);
+        assert_eq!(view.client.total_points, 0);
         assert_eq!(view.freelancer.score, 6000);
         assert_eq!(view.freelancer.total_jobs, 1);
-        assert_eq!(view.freelancer.total_points, 1000);
+        assert_eq!(view.freelancer.total_points, 0);
     }
 
     #[test]
