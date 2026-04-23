@@ -131,7 +131,11 @@ impl ReputationContract {
         (score as i32).saturating_mul(2_000)
     }
 
-    fn score_from_profile(address: &Address, role: Role, profile: &profile::Profile) -> ReputationScore {
+    fn score_from_profile(
+        address: &Address,
+        role: Role,
+        profile: &profile::Profile,
+    ) -> ReputationScore {
         match role {
             Role::Client => ReputationScore {
                 address: address.clone(),
@@ -320,7 +324,8 @@ impl ReputationContract {
         let mut profile = storage::read_profile_or_default(&env, &address);
         let (new_score, total_jobs) = match role {
             Role::Client => {
-                profile.client_score = Self::clamp_score(profile.client_score.saturating_add(delta));
+                profile.client_score =
+                    Self::clamp_score(profile.client_score.saturating_add(delta));
                 profile.client_jobs = profile.client_jobs.saturating_add(1);
                 (profile.client_score, profile.client_jobs)
             }
