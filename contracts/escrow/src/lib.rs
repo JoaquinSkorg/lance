@@ -752,7 +752,9 @@ impl EscrowContract {
         }
 
         let next_status = EscrowStatus::Resolved;
-        job.status.validate_transition(&next_status).expect("invalid state transition");
+        job.status
+            .validate_transition(&next_status)
+            .expect("invalid state transition");
         job.released_amount += total_payout;
         job.status = next_status;
         log!(
