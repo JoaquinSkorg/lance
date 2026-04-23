@@ -1,8 +1,8 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
-    Bytes, Env, Vec,
+    contract, contracterror, contractimpl, contracttype, log, panic_with_error, symbol_short,
+    Address, Bytes, Env, Vec,
 };
 
 const MAX_HASH_LEN: u32 = 96;
@@ -80,6 +80,7 @@ impl JobRegistryContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::NextJobId, &1u64);
 
+        log!(&env, "JobRegistry initialized with admin: {}", admin);
         env.events().publish((symbol_short!("init"),), admin);
     }
 
@@ -114,6 +115,7 @@ impl JobRegistryContract {
             env.storage().instance().set(&DataKey::NextJobId, &updated);
         }
 
+        log!(&env, "post_job: id {} client {} budget {}", job_id, client, budget);
         env.events()
             .publish((symbol_short!("jobpost"), job_id), (client, budget));
     }
@@ -133,6 +135,7 @@ impl JobRegistryContract {
             .unwrap_or_else(|| panic_with_error!(&env, JobRegistryError::Overflow));
         env.storage().instance().set(&DataKey::NextJobId, &next);
 
+        log!(&env, "post_job_auto: id {} client {} budget {}", job_id, client, budget);
         env.events()
             .publish((symbol_short!("jobauto"), job_id), (client, budget));
 
@@ -175,6 +178,7 @@ impl JobRegistryContract {
         });
         env.storage().persistent().set(&bids_key, &bids);
 
+        log!(&env, "submit_bid: id {} freelancer {}", job_id, freelancer);
         env.events()
             .publish((symbol_short!("bid"), job_id), freelancer);
     }
@@ -219,6 +223,7 @@ impl JobRegistryContract {
         job.status = JobStatus::InProgress;
         env.storage().persistent().set(&key, &job);
 
+        log!(&env, "accept_bid: id {} client {} freelancer {}", job_id, client, freelancer);
         env.events()
             .publish((symbol_short!("accept"), job_id), freelancer);
     }
@@ -249,6 +254,7 @@ impl JobRegistryContract {
             .persistent()
             .set(&DataKey::Deliverable(job_id), &hash);
 
+        log!(&env, "submit_deliverable: id {} freelancer {}", job_id, freelancer);
         env.events()
             .publish((symbol_short!("deliver"), job_id), freelancer);
     }
@@ -273,6 +279,7 @@ impl JobRegistryContract {
         job.status = JobStatus::Disputed;
         env.storage().persistent().set(&key, &job);
 
+        log!(&env, "mark_disputed: id {}", job_id);
         env.events().publish((symbol_short!("dispute"), job_id), ());
     }
 
