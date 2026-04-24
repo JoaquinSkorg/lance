@@ -1,63 +1,57 @@
-import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
+import { Horizon } from "@stellar/stellar-sdk";
+import { 
+  StellarWalletsKit, 
+  WalletNetwork, 
+  allowAllModules 
+} from "@creit.tech/stellar-wallets-kit";
 
-// TODO: See docs/ISSUES.md — "Wallet Connection"
-let kit: StellarWalletsKit | null = null;
+export type StellarNetwork = "public" | "testnet";
+
+export const APP_STELLAR_NETWORK: StellarNetwork =
+  (process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet").toLowerCase() === "public"
+    ? "public"
+    : "testnet";
+
+const HORIZON_URL =
+  process.env.NEXT_PUBLIC_HORIZON_URL ||
+  (APP_STELLAR_NETWORK === "public" 
+    ? "https://horizon.stellar.org" 
+    : "https://horizon-testnet.stellar.org");
+
+export const horizonServer = new Horizon.Server(HORIZON_URL);
+
+let kitInstance: StellarWalletsKit | null = null;
 
 export function getWalletsKit(): StellarWalletsKit {
-  if (!kit) {
-    kit = new StellarWalletsKit({
-      network:
-        (process.env.NEXT_PUBLIC_STELLAR_NETWORK as Networks) ??
-        Networks.TESTNET,
+  if (typeof window === "undefined") {
+    return {} as StellarWalletsKit;
+  }
+  
+  if (!kitInstance) {
+    kitInstance = new StellarWalletsKit({
+      network: APP_STELLAR_NETWORK === "public" ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
       selectedWalletId: "freighter",
+      modules: allowAllModules(),
     });
   }
-  return kit;
+  return kitInstance;
 }
 
-/**
- * Opens the wallet-select modal and returns the connected public key.
- * Resolves once the user selects a wallet and the address is retrieved.
- */
-export async function connectWallet(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return "GD...CLIENT";
-  const walletsKit = getWalletsKit();
-  return new Promise<string>((resolve, reject) => {
-    walletsKit.openModal({
-      onWalletSelected: async () => {
-        try {
-          walletsKit.closeModal();
-          const { address } = await walletsKit.getAddress();
-          resolve(address);
-        } catch (err) {
-          reject(err);
-        }
-      },
-    });
-  });
+export function isValidStellarAddress(address: string): boolean {
+  return /^[G][A-Z2-7]{55}$/.test(address);
 }
 
-export async function getConnectedWalletAddress(): Promise<string | null> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return "GD...CLIENT";
+export function getWalletNetwork(): StellarNetwork {
+  return APP_STELLAR_NETWORK;
+}
+
+export async function getXlmBalance(address: string): Promise<number> {
   try {
-    const { address } = await getWalletsKit().getAddress();
-    return address ?? null;
-  } catch {
-    return null;
+    const account = await horizonServer.loadAccount(address);
+    const native = account.balances.find((b) => b.asset_type === "native");
+    return native ? parseFloat(native.balance) : 0;
+  } catch (err) {
+    console.error("Error fetching XLM balance:", err);
+    return 0;
   }
-}
-
-/**
- * Signs an XDR transaction string via the connected wallet.
- * Returns the signed XDR string ready for submission to the Soroban RPC.
- */
-export async function signTransaction(xdr: string): Promise<string> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return xdr;
-  const walletsKit = getWalletsKit();
-  const networkPassphrase =
-    (process.env.NEXT_PUBLIC_STELLAR_NETWORK as Networks) ?? Networks.TESTNET;
-  const { signedTxXdr } = await walletsKit.signTransaction(xdr, {
-    networkPassphrase,
-  });
-  return signedTxXdr;
 }
