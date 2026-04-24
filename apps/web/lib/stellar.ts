@@ -1,10 +1,25 @@
 import { Horizon, Networks } from "@stellar/stellar-sdk";
 
-export const APP_STELLAR_NETWORK =
-  (process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet").toUpperCase() ===
-  "PUBLIC"
-    ? Networks.PUBLIC
-    : Networks.TESTNET;
+export type StellarNetwork = "public" | "testnet";
+
+type WalletModalOptions = {
+  onWalletSelected: () => Promise<void> | void;
+};
+
+type WalletAddressResult = {
+  address: string;
+};
+
+export type WalletKit = {
+  openModal: (options: WalletModalOptions) => Promise<void>;
+  closeModal: () => void;
+  getAddress: () => Promise<WalletAddressResult>;
+};
+
+export const APP_STELLAR_NETWORK: StellarNetwork =
+  (process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet").toUpperCase() === "PUBLIC"
+    ? "public"
+    : "testnet";
 
 const HORIZON_URL =
   process.env.NEXT_PUBLIC_HORIZON_URL ||
@@ -16,10 +31,8 @@ export function isValidStellarAddress(address: string): boolean {
   return /^[G][A-Z2-7]{55}$/.test(address);
 }
 
-export function getWalletNetwork(): string {
-  return APP_STELLAR_NETWORK === Networks.PUBLIC
-    ? "public"
-    : "testnet";
+export function getWalletNetwork(): StellarNetwork {
+  return APP_STELLAR_NETWORK;
 }
 
 export function disconnectWallet(): void {
@@ -29,24 +42,6 @@ export function disconnectWallet(): void {
     window.dispatchEvent(new Event("storage"));
   }
 }
-
-/* ---------- TYPES ---------- */
-
-type WalletModalOptions = {
-  onWalletSelected: () => Promise<void> | void;
-};
-
-type WalletAddressResult = {
-  address: string;
-};
-
-type WalletKit = {
-  openModal: (options: WalletModalOptions) => Promise<void>;
-  closeModal: () => void;
-  getAddress: () => Promise<WalletAddressResult>;
-};
-
-/* ---------- MOCK WALLET KIT ---------- */
 
 export function getWalletsKit(): WalletKit {
   return {
@@ -70,8 +65,6 @@ export function getWalletsKit(): WalletKit {
     },
   };
 }
-
-/* ---------- HELPERS ---------- */
 
 export async function getConnectedWalletAddress(): Promise<string | null> {
   if (typeof window !== "undefined") {
