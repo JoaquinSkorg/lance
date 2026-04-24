@@ -1,7 +1,4 @@
-use crate::{
-    db::AppState,
-    error::Result,
-};
+use crate::{db::AppState, error::Result};
 use axum::{
     routing::{get, post},
     Json, Router,
