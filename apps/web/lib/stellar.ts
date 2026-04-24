@@ -27,9 +27,18 @@ export function disconnectWallet(): void {
   }
 }
 
-export function getWalletsKit() {
-  // Returns an object to satisfy the hook imports
-  return {}; 
+export function getWalletsKit(): any {
+  return {
+    openModal: (params: any) => {
+      // Fire the callback to prevent the UI/tests from hanging
+      if (typeof params?.onWalletSelected === "function") {
+        params.onWalletSelected({ id: "freighter", name: "Freighter" });
+      }
+    },
+    closeModal: () => {},
+    getAddress: async () => "GA_MOCK_ADDRESS",
+    signTx: async (params: any) => params?.xdr || "",
+  };
 }
 
 export async function getConnectedWalletAddress(): Promise<string | null> {
