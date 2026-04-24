@@ -37,7 +37,7 @@ export type WalletKit = {
   openModal: (options?: WalletModalOptions) => Promise<{ address: string }>;
   closeModal: () => void;
   getAddress: () => Promise<{ address: string }>;
-  setNetwork: (network: Networks) => void;
+  setNetwork: (network: any) => void;
   signTransaction: (xdr: string) => Promise<string>;
   signMessage: (message: string) => Promise<string>;
   disconnect: () => Promise<void>;
@@ -225,7 +225,7 @@ function isE2EMode(): boolean {
   return process.env.NEXT_PUBLIC_E2E === "true";
 }
 
-function getNetworkPassphrase(network = APP_STELLAR_NETWORK): Networks {
+function getNetworkPassphrase(network = APP_STELLAR_NETWORK): string {
   return network === "public" ? Networks.PUBLIC : Networks.TESTNET;
 }
 
@@ -251,7 +251,7 @@ async function initializeWalletsKit(): Promise<void> {
     ]);
 
   StellarWalletsKit.init({
-    network: getNetworkPassphrase(),
+    network: getNetworkPassphrase() as any,
     selectedWalletId: "freighter",
     modules: [new FreighterModule(), new AlbedoModule(), new xBullModule()],
   });
