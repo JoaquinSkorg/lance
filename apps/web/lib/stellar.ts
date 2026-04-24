@@ -1,7 +1,6 @@
 import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
 import { Horizon, StrKey, Transaction } from "@stellar/stellar-sdk";
 import { categorizeWalletError } from "./wallet-errors";
-import { categorizeWalletError } from "./wallet-errors";
 
 let kit: StellarWalletsKit | null = null;
 
