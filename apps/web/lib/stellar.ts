@@ -1,67 +1,38 @@
-import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
+import { Horizon, Networks } from "@stellar/stellar-sdk";
 
-let kit: StellarWalletsKit | null = null;
+export const APP_STELLAR_NETWORK = (process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet").toUpperCase() === "PUBLIC" 
+  ? Networks.PUBLIC 
+  : Networks.TESTNET;
 
-export function getWalletsKit(): StellarWalletsKit {
-  if (!kit) {
-    kit = new StellarWalletsKit({
-      network:
-        (process.env.NEXT_PUBLIC_STELLAR_NETWORK as Networks) ??
-        Networks.TESTNET,
-      selectedWalletId: "freighter",
-    });
-  }
-  return kit;
-}
+const HORIZON_URL = process.env.NEXT_PUBLIC_HORIZON_URL || "https://horizon-testnet.stellar.org";
+export const horizonServer = new Horizon.Server(HORIZON_URL);
 
-export async function connectWallet(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return "GD...CLIENT";
-  const walletsKit = getWalletsKit();
-  return new Promise<string>((resolve, reject) => {
-    walletsKit.openModal({
-      onWalletSelected: async () => {
-        try {
-          walletsKit.closeModal();
-          const { address } = await walletsKit.getAddress();
-          resolve(address);
-        } catch (err) {
-          reject(err);
-        }
-      },
-    });
-  });
-}
-
-export async function getConnectedWalletAddress(): Promise<string | null> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return "GD...CLIENT";
+/**
+ * Validates if a string is a valid Stellar public key (G...)
+ */
+export function isValidStellarAddress(address: string): boolean {
   try {
-    const { address } = await getWalletsKit().getAddress();
-    return address ?? null;
+    return /^[G][A-Z2-7]{55}$/.test(address);
   } catch {
-    return null;
+    return false;
   }
-}
-
-export async function signTransaction(xdr: string): Promise<string> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") return xdr;
-  const walletsKit = getWalletsKit();
-  const networkPassphrase =
-    (process.env.NEXT_PUBLIC_STELLAR_NETWORK as Networks) ?? Networks.TESTNET;
-  const { signedTxXdr } = await walletsKit.signTransaction(xdr, {
-    networkPassphrase,
-  });
-  return signedTxXdr;
 }
 
 /**
- * Signs a plaintext SIWS message via the connected wallet.
- * Returns a base64-encoded signature string.
+ * Gets the current network configuration for the wallet
  */
-export async function signMessage(message: string): Promise<string> {
-  if (process.env.NEXT_PUBLIC_E2E === "true") {
-    return Buffer.from("e2e-mock-signature").toString("base64");
+export function getWalletNetwork(): string {
+  return APP_STELLAR_NETWORK === Networks.PUBLIC ? "public" : "testnet";
+}
+
+/**
+ * Disconnects the wallet by clearing session data
+ */
+export function disconnectWallet(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("wallet_address");
+    localStorage.removeItem("wallet_type");
+    // Dispatch custom event if your app listens for storage changes
+    window.dispatchEvent(new Event("storage"));
   }
-  const walletsKit = getWalletsKit();
-  const { signedMessage } = await walletsKit.signMessage(message);
-  return Buffer.from(signedMessage).toString("base64");
 }
