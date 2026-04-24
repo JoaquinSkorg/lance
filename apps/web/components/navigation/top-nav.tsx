@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { Button } from "@/components/ui/button";
-import { Search, Bell, Menu, LogOut, BriefcaseBusiness } from "lucide-react";
+import { Search, Menu, LogOut, BriefcaseBusiness } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { SessionSwitcher } from "@/components/auth/session-switcher";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
+import { NotificationCenter } from "@/components/notifications/notification-center";
 
 export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
   const { isLoggedIn, logout, login, role, user } = useAuthStore();
@@ -69,10 +70,7 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
           <ThemeToggle />
           {isLoggedIn ? (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="relative rounded-full bg-card/70">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-primary"></span>
-              </Button>
+              <NotificationCenter />
               <div className="hidden items-center gap-3 rounded-full border border-border/70 bg-card/70 px-2 py-1.5 md:flex">
                 <Avatar className="h-8 w-8 border border-border/50">
                   <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary">
