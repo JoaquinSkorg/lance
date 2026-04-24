@@ -12,7 +12,6 @@
  */
 
 import {
-  Address,
   BASE_FEE,
   Contract,
   Networks,
