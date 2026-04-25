@@ -31,6 +31,8 @@ import {
 } from "@/lib/format";
 import { connectWallet, getConnectedWalletAddress } from "@/lib/stellar";
 import { cn } from "@/lib/utils";
+import { ActivityLogList } from "@/components/activity-log";
+
 
 export default function JobDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -609,23 +611,11 @@ export default function JobDetailsPage() {
           ) : null}
 
           <section className="rounded-[2rem] border border-slate-200 bg-white/85 p-6 shadow-[0_20px_60px_-48px_rgba(15,23,42,0.45)]">
-            <h2 className="text-lg font-semibold text-slate-950">
-              Activity pulse
+            <h2 className="text-lg font-semibold text-slate-950 mb-5">
+              Activity Pulse
             </h2>
-            <div className="mt-5 space-y-4">
-              <div className="flex items-center justify-between rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">Next milestone</span>
-                <span className="text-sm font-semibold text-slate-900">
-                  {nextMilestone ? `#${nextMilestone.index}` : "Complete"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-[1.4rem] border border-slate-200 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">Last update</span>
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <Clock3 className="h-4 w-4 text-amber-600" />
-                  {formatDate(job.updated_at)}
-                </span>
-              </div>
+            <div className="max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              <ActivityLogList jobId={id} />
             </div>
           </section>
         </aside>
@@ -633,3 +623,4 @@ export default function JobDetailsPage() {
     </SiteShell>
   );
 }
+

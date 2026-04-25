@@ -29,3 +29,18 @@ vi.mock("@creit.tech/stellar-wallets-kit/modules/albedo", () => ({
 vi.mock("@creit.tech/stellar-wallets-kit/modules/xbull", () => ({
 	xBullModule: function xBullModule() {},
 }));
+
+// Mock the local toast implementation used across the app so tests can spy on
+// toast calls (loading, update, dismiss, success, error, info).
+vi.mock("@/lib/toast", () => {
+	const mock = {
+		loading: vi.fn(() => ({ id: "mock-toast" })),
+		update: vi.fn(),
+		dismiss: vi.fn(),
+		dismissAll: vi.fn(),
+		info: vi.fn(),
+		success: vi.fn(),
+		error: vi.fn(),
+	};
+	return { toast: mock };
+});
