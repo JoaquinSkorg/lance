@@ -6,19 +6,37 @@ const nextConfig: NextConfig = {
     root: path.resolve(process.cwd(), "../../"),
   },
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  webpack(config: any, { isServer }: { isServer: boolean }) {
+  webpack(config, { isServer, webpack }) {
     if (!isServer) {
-      // sodium-native and require-addon are Node.js native modules pulled in
-      // by @stellar/stellar-sdk. They cannot be compiled by webpack for the
-      // browser — mark them false so the bundle stays clean.
-      config.resolve = config.resolve ?? {};
+      // ── 1. Ignore sodium-native entirely on the client ──────────────────────
+      // stellar-base pulls in sodium-native as an *optional* Node.js C++ addon.
+      // It is never needed in the browser — the SDK falls back to tweetnacl
+      // automatically. Ignoring it here prevents Webpack from emitting
+      // "Critical dependency" warnings and avoids bundling a native module.
+      config.plugins.push(
+        new webpack.IgnorePlugin({
+          resourceRegExp: /^sodium-native$/,
+        }),
+        // Also ignore the generic require-addon helper used by some native modules
+        new webpack.IgnorePlugin({
+          resourceRegExp: /^require-addon$/,
+        }),
+      );
+
+      // ── 2. Node.js built-in fallbacks ────────────────────────────────────────
+      // stellar-sdk references several Node built-ins. In the browser these
+      // should either be polyfilled or silently stubbed out.
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        "sodium-native": false,
-        "require-addon": false,
+        fs: false,
+        path: false,
+        crypto: false,
+        net: false,
+        tls: false,
+        dns: false,
       };
     }
+
     return config;
   },
 };
