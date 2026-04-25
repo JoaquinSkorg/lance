@@ -325,7 +325,7 @@ function PublicProfileWorkspace({ address }: { address: string }) {
                       />
                     ) : (
                       profile.portfolio_links.map((link) => (
-                        
+                        <a
                           key={link}
                           href={link}
                           target="_blank"
