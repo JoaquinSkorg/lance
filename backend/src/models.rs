@@ -45,12 +45,25 @@ pub struct Bid {
     pub proposal_hash: Option<String>,
     pub status: String, // pending | accepted | rejected
     pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateBidRequest {
     pub freelancer_address: String,
     pub proposal: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
+pub struct BidStatusTransition {
+    pub id: Uuid,
+    pub bid_id: Uuid,
+    pub from_status: String,
+    pub to_status: String,
+    pub transitioned_by: String,
+    pub reason: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
