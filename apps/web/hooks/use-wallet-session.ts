@@ -161,7 +161,6 @@ export function useWalletSession() {
     isAuthenticating,
     networkMismatch,
     error,
-    connectionStep,
     siwsResponse,
     connect,
     authenticate,
