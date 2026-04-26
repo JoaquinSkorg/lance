@@ -95,6 +95,7 @@ pub struct MilestoneEvent {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct CreateMilestoneEventRequest {
     pub event_type: String,
     pub actor_address: Option<String>,
