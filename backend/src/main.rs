@@ -4,22 +4,8 @@ use std::net::SocketAddr;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod db;
-mod env_config;
-mod error;
-mod indexer;
-mod indexer_metrics;
-mod ledger_follower;
-mod middleware;
-mod models;
-mod routes;
-mod services;
-mod soroban_rpc;
-mod tx_metadata_cache;
-mod tx_queue;
-mod worker;
-
-pub use db::AppState;
+use backend::{db, env_config, indexer, middleware, routes, worker};
+use db::AppState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
