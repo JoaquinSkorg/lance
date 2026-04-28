@@ -121,6 +121,7 @@ impl LedgerFollower {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn next_cycle(&mut self) -> Result<LedgerCycle> {
         let mut last_processed_ledger: i64 =
             sqlx::query_scalar("SELECT last_processed_ledger FROM indexer_state WHERE id = 1")
@@ -265,10 +266,15 @@ impl LedgerFollower {
     }
 }
 
+#[tracing::instrument(skip(tx, event), fields(event_id = tracing::field::Empty))]
 async fn process_event_side_effects(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     event: &Value,
 ) -> Result<()> {
+    if let Some(id) = event.get("id").and_then(Value::as_str) {
+        tracing::Span::current().record("event_id", id);
+    }
+
     let topics = event.get("topic").and_then(Value::as_array);
     let first_topic = topics
         .and_then(|items| items.first())
